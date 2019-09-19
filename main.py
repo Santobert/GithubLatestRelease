@@ -17,10 +17,15 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
             r = requests.get(URL)
             r.raise_for_status()
         except (requests.exceptions.ConnectionError, requests.exceptions.HTTPError):
+            # Invalid or no response
             return None
 
         # Find the latest release thats not a prerelease
-        releases = json.loads(r.content)
+        try:
+            releases = json.loads(r.content)
+        except ValueError:
+            # Invalid JSON
+            return None
         for release in releases:
             if release["prerelease"] is True:
                 continue
@@ -34,7 +39,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         """Handle a get request."""
         latest_version = self.get_latest_version()
         if latest_version is None:
-            self.send_error(500, "The requested repository could not be reached.")
+            self.send_error(500, "The requested repository could not be reached")
         else:
             self.send_response(200)
             self.send_header("content-type", "application/json")
