@@ -62,6 +62,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(bytes(json.dumps(latest_version), "utf-8"))
 
-
-httpd = HTTPServer(("localhost", 8080), SimpleHTTPRequestHandler)
-httpd.serve_forever()
+if __name__ == "__main__":
+    server_address = ('', 80)
+    httpd = HTTPServer(server_address, SimpleHTTPRequestHandler)
+    httpd.serve_forever()
