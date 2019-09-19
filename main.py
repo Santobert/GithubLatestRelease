@@ -1,5 +1,6 @@
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from flask import abort, Flask, request, Response
 import json
+import logging
 import requests
 from typing import Optional
 
@@ -7,62 +8,54 @@ OWNER = "home-assistant"
 REPO = "home-assistant"
 URL = f"https://api.github.com/repos/{OWNER}/{REPO}/releases"
 
+app = Flask(__name__)
 
-class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
-    def get_latest_version(self) -> Optional[dict]:
-        """Return the latest release that's not a prerelease."""
 
-        # Request the github api for all releases
-        try:
-            r = requests.get(URL)
-            r.raise_for_status()
-        except (requests.exceptions.ConnectionError, requests.exceptions.HTTPError):
-            # Invalid or no response
-            return None
+def get_latest_version() -> Optional[dict]:
+    """Return the latest release that's not a prerelease."""
 
-        # Find the latest release thats not a prerelease
-        try:
-            releases = json.loads(r.content)
-        except ValueError:
-            # Invalid JSON
-            return None
-        for release in releases:
-            if release["prerelease"] is True:
-                continue
+    # Request the github api for all releases
+    try:
+        r = requests.get(URL)
+        r.raise_for_status()
+    except (requests.exceptions.ConnectionError, requests.exceptions.HTTPError):
+        # Invalid or no response
+        return None
 
-            result = {}
-            result["release-notes"] = release["body"]
-            result["version"] = release["name"]
-            return result
+    # Find the latest release thats not a prerelease
+    try:
+        releases = json.loads(r.content)
+    except ValueError:
+        # Invalid JSON
+        return None
+    for release in releases:
+        if release["prerelease"] is True:
+            continue
 
-    def do_GET(self):
-        """Handle a get request."""
-        latest_version = self.get_latest_version()
-        if latest_version is None:
-            self.send_error(500, "The requested repository could not be reached")
-        else:
-            self.send_response(200)
-            self.send_header("content-type", "application/json")
-            self.end_headers()
-            self.wfile.write(bytes(json.dumps(latest_version), "utf-8"))
-            return
+        result = {}
+        result["release-notes"] = release["body"]
+        result["version"] = release["name"]
+        return result
 
-    def do_POST(self):
-        """Handle a post request."""
-        content_length = int(self.headers["Content-Length"])
-        body = self.rfile.read(content_length)
+
+@app.route("/", methods=["GET", "POST"])
+def do_GET():
+    """Handle a request."""
+    if request.method == "POST":
+        body = request.get_json()
+        user = request.remote_addr
         # do sth with that body
+        logging.info("%s posted %s", user, body)
 
-        latest_version = self.get_latest_version()
-        if latest_version is None:
-            self.send_error(500, "The requested repository could not be reached.")
-        else:
-            self.send_response(200)
-            self.send_header("content-type", "application/json")
-            self.end_headers()
-            self.wfile.write(bytes(json.dumps(latest_version), "utf-8"))
+    latest_version = get_latest_version()
+    if latest_version is None:
+        abort(500)
+    else:
+        response = Response(json.dumps(latest_version))
+        response.headers["Content-Type"] = "application/json"
+        return response
+
 
 if __name__ == "__main__":
-    server_address = ('', 80)
-    httpd = HTTPServer(server_address, SimpleHTTPRequestHandler)
-    httpd.serve_forever()
+    logging.basicConfig(level=logging.INFO, filename="info.log")
+    app.run(host="0.0.0.0", port=80)
